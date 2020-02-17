@@ -1,0 +1,19 @@
+[package]
+name = "client"
+version = "0.1.0"
+authors = ["Timon Post <timonpost@hotmail.nl>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+legion = { version = "0.2.1", git = "https://github.com/TomGillen/legion", branch = "master" }
+legion-sync = { path = "../../legion-sync" }
+net-sync = { path = "../../net-sync" }
+
+track = { path = "../../track"}
+shared = { path = "../shared"}
+
+crossterm = "0.16.0"
+simple_logger = "1.5.0"
+log="0.4.8"
