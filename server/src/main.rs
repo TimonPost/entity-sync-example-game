@@ -1,9 +1,18 @@
-use crate::systems::{draw_player_system, server_recv_sync_system};
+use crate::systems::read_received_system;
 use crossterm::{cursor::Hide, terminal::enable_raw_mode, ExecutableCommand};
-use legion::prelude::{any, Resources, Schedule, Universe};
-use legion_sync::resources::ServerUniverseResource;
+use legion::prelude::{Resources, Schedule, Universe};
+use legion_sync::{
+    resources::{tcp::TcpListenerResource, BufferResource, Packer, ReceiveBufferResource},
+    systems::tcp::{tcp_connection_listener, tcp_receive_system},
+};
 use net_sync::compression::lz4::Lz4;
-use std::{io::stdout, thread, time::Duration};
+use shared::systems::draw_player_system;
+use std::{
+    io::stdout,
+    net::{SocketAddr, TcpListener},
+    thread,
+    time::Duration,
+};
 use track::serialisation::bincode::Bincode;
 
 mod systems;
@@ -11,14 +20,17 @@ mod systems;
 fn main() {
     initialize_terminal();
 
-    let mut universe = Universe::new();
+    let universe = Universe::new();
     let mut world = universe.create_world();
 
-    let mut server_resource =
-        ServerUniverseResource::new(Bincode, Lz4, "127.0.0.1:1119".parse().unwrap());
+    let listener = TcpListener::bind("127.0.0.1:1119".parse::<SocketAddr>().unwrap()).unwrap();
+    listener.set_nonblocking(true);
 
     let mut resources = Resources::default();
-    resources.insert(server_resource);
+    resources.insert(ReceiveBufferResource::default());
+    resources.insert(TcpListenerResource::new(Some(listener)));
+    resources.insert(Packer::<Bincode, Lz4>::default());
+    resources.insert(BufferResource::from_capacity(1500));
 
     let mut schedule = initialize_systems();
 
@@ -37,7 +49,9 @@ fn initialize_terminal() {
 
 fn initialize_systems() -> Schedule {
     Schedule::builder()
-        .add_system(server_recv_sync_system::<Bincode, Lz4>())
+        .add_system(read_received_system())
         .add_system(draw_player_system())
+        .add_system(tcp_connection_listener())
+        .add_system(tcp_receive_system::<Bincode, Lz4>())
         .build()
 }
