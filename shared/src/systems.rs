@@ -4,11 +4,11 @@ use crossterm::QueueableCommand;
 use crossterm::terminal::{ClearType, Clear};
 use crossterm::cursor::MoveTo;
 use crossterm::style::Print;
-use legion_sync::components::UuidComponent;
+use legion_sync::components::UidComponent;
 
 pub fn draw_player_system() -> Box<dyn Schedulable> {
     SystemBuilder::new("draw_player_system")
-        .with_query(<(legion::prelude::Write<crate::components::Position>, Read<UuidComponent>)>::query())
+        .with_query(<(legion::prelude::Write<crate::components::Position>, Read<UidComponent>)>::query())
         .build(|_, mut world, _, query| {
             for (pos, _) in query.iter_mut(&mut world) {
                 let mut stdout = stdout();

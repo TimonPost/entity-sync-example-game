@@ -1,14 +1,14 @@
 use legion::prelude::*;
 use shared::components::Position;
 
-use legion_sync::{components::UuidComponent, resources::ReceiveBufferResource};
+use legion_sync::{components::UidComponent, resources::ReceiveBufferResource};
 use log::debug;
 use track::{serialisation::bincode::Bincode, Apply};
 
 pub fn read_received_system() -> Box<dyn Schedulable> {
     SystemBuilder::new("read_received_system")
         .write_resource::<ReceiveBufferResource>()
-        .with_query(<(legion::prelude::Write<Position>, Read<UuidComponent>)>::query())
+        .with_query(<(legion::prelude::Write<Position>, Read<UidComponent>)>::query())
         .build(|command_buffer, mut world, buffer, query| {
             for packet in buffer.drain() {
                 match packet.event() {
@@ -17,15 +17,15 @@ pub fn read_received_system() -> Box<dyn Schedulable> {
                             (),
                             vec![(
                                 Position { x: 0, y: 0 },
-                                UuidComponent::from(packet.identifier().clone()),
+                                UidComponent::new(packet.identifier().clone()),
                             )],
                         );
 
                         debug!("Inserted entity {:?}", packet.identifier());
                     }
                     legion_sync::Event::Modified(data) => {
-                        for (mut pos, uuid) in query.iter_mut(&mut world) {
-                            if uuid.uuid() == *packet.identifier() {
+                        for (mut pos, identifier) in query.iter_mut(&mut world) {
+                            if identifier.uid() == packet.identifier() {
                                 Apply::apply_to(&mut *pos, &data, Bincode);
                                 break;
                             }
