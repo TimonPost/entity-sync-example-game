@@ -15,7 +15,6 @@ use std::{
 };
 use track::serialisation::bincode::Bincode;
 
-mod change_filter;
 mod systems;
 
 fn main() {
@@ -57,10 +56,3 @@ fn initialize_systems() -> Schedule {
         .build()
 }
 
-trait WorldExt {
-    fn a(&self);
-}
-
-impl WorldExt for legion::systems::SubWorld {
-    fn a(&self) {}
-}
