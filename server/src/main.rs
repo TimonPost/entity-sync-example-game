@@ -15,6 +15,7 @@ use std::{
 };
 use track::serialisation::bincode::Bincode;
 
+mod change_filter;
 mod systems;
 
 fn main() {
@@ -54,4 +55,12 @@ fn initialize_systems() -> Schedule {
         .add_system(tcp_connection_listener())
         .add_system(tcp_receive_system::<Bincode, Lz4>())
         .build()
+}
+
+trait WorldExt {
+    fn a(&self);
+}
+
+impl WorldExt for legion::systems::SubWorld {
+    fn a(&self) {}
 }

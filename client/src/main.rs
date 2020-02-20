@@ -67,7 +67,7 @@ fn initial_data(world: &mut World) -> &[Entity] {
         (0..1).map(|_| {
             (
                 Position { x: 10, y: 10 },
-                UidComponent::new(uid_allocator.allocate(None)),
+                UidComponent::new(uid_allocator.allocate(Some(1))),
             )
         }),
     )

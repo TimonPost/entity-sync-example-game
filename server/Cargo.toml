@@ -15,6 +15,7 @@ legion = { version = "0.2.1", git = "https://github.com/TomGillen/legion", branc
 
 net-sync = { path =  "../../net-sync" }
 legion-sync = { path = "../../legion-sync"}
+bit-set = "0.5.1"
 
 shared = { path = "../shared" }
 bincode = "1.2.1"
