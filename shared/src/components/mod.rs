@@ -1,6 +1,6 @@
-use track::preclude::*;
+use legion_sync::tracking::*;
 
-#[track]
+#[sync]
 #[derive(Debug)]
 pub struct Position {
     pub x: u16,
@@ -13,5 +13,20 @@ impl Position {
         self.y = pos.1;
     }
 }
+
+impl Default for Position {
+    fn default() -> Self {
+        Position {
+            x: 0,
+            y: 0
+        }
+    }
+}
+
+//#[track]
+//#[derive(Debug)]
+//struct PlayerInfo {
+//    pub
+//}
 
 
