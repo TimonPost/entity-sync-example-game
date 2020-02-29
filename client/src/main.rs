@@ -1,18 +1,16 @@
 use crate::systems::move_player_system;
 use crossterm::{cursor::Hide, terminal::enable_raw_mode, ExecutableCommand};
 use legion::{filter::filter_fns::any, prelude::*};
-use legion_sync::resources::tcp::TcpClientResource;
+use legion_sync::resources::{ReceiveBufferResource, RegisteredComponentsResource};
+use legion_sync::tracking::Bincode;
 use legion_sync::{
     components::UidComponent,
-    resources::{EventResource, Packer, SentBufferResource},
+    resources::{tcp::TcpClientResource, EventResource, Packer, SentBufferResource},
     systems::{tcp::tcp_sent_system, track_modifications_system},
 };
-use net_sync::compression::lz4::Lz4;
-use net_sync::uid::UidAllocator;
-use shared::components::Position;
-use shared::systems::draw_player_system;
+use net_sync::{compression::lz4::Lz4, uid::UidAllocator};
+use shared::{components::Position, systems::draw_player_system};
 use std::{io::stdout, thread, time::Duration};
-use track::serialisation::bincode::Bincode;
 
 mod systems;
 
@@ -32,6 +30,7 @@ fn main() {
     resources.insert(event_resource);
     resources.insert(SentBufferResource::new());
     resources.insert(Packer::<Bincode, Lz4>::default());
+    resources.insert(RegisteredComponentsResource::new());
 
     initial_data(&mut world);
 
