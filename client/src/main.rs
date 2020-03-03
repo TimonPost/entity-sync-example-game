@@ -1,4 +1,5 @@
-use crate::systems::move_player_system;
+use crate::systems::{insert_enemy_system, move_enemy_system, move_player_system, ClientState};
+use crossterm::style::Color;
 use crossterm::{cursor::Hide, terminal::enable_raw_mode, ExecutableCommand};
 use legion::{filter::filter_fns::any, prelude::*};
 use legion_sync::resources::{ReceiveBufferResource, RegisteredComponentsResource};
@@ -9,6 +10,7 @@ use legion_sync::{
     systems::{tcp::tcp_sent_system, track_modifications_system},
 };
 use net_sync::{compression::lz4::Lz4, uid::UidAllocator};
+use shared::components::{Coloring, PlayerType, PlayerTypeOp};
 use shared::{components::Position, systems::draw_player_system};
 use std::{io::stdout, thread, time::Duration};
 
@@ -16,6 +18,7 @@ mod systems;
 
 fn main() {
     initialize_terminal();
+    let mut uid_allocator = UidAllocator::new();
 
     let universe = Universe::new();
     let mut world = universe.create_world();
@@ -31,8 +34,8 @@ fn main() {
     resources.insert(SentBufferResource::new());
     resources.insert(Packer::<Bincode, Lz4>::default());
     resources.insert(RegisteredComponentsResource::new());
-
-    initial_data(&mut world);
+    initial_data(&mut world, &mut uid_allocator);
+    resources.insert(ClientState::new(uid_allocator));
 
     let mut schedule = initialize_systems();
 
@@ -55,19 +58,21 @@ fn initialize_systems() -> Schedule {
         .add_system(tcp_sent_system::<Bincode, Lz4>())
         .add_system(move_player_system())
         .add_system(draw_player_system())
+        .add_system(insert_enemy_system())
+        .add_system(move_enemy_system())
         .build()
 }
 
-fn initial_data(world: &mut World) -> &[Entity] {
-    let mut uid_allocator = UidAllocator::new();
-
+fn initial_data(world: &mut World, alloc: &mut UidAllocator) {
     world.insert(
         (),
         (0..1).map(|_| {
             (
-                Position { x: 10, y: 10 },
-                UidComponent::new(uid_allocator.allocate(Some(1))),
+                Position { x: 5, y: 5 },
+                UidComponent::new(alloc.allocate(None)),
+                PlayerType::new(PlayerTypeOp::Player),
+                Coloring::new(Color::Blue),
             )
         }),
-    )
+    );
 }

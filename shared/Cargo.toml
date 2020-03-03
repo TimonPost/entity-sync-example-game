@@ -13,4 +13,4 @@ crossbeam-channel = "0.4.0"
 uuid = { version = "0.8.1", features=["serde", "v4"] }
 crossterm = "0.16.0"
 legion-sync = { path = "../../legion-sync"}
-legion = { version = "0.2.1", git = "https://github.com/TimonPost/legion.git", branch = "clone_merge_merge" }
+legion = { version = "0.2.1",  branch = "clone_move", path = "../../../legion"}
