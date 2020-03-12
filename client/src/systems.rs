@@ -1,8 +1,7 @@
-use crossterm::style::Color;
 use crossterm::{
     event,
     event::{Event, KeyCode, KeyEvent},
-    QueueableCommand,
+    style::Color,
 };
 use legion::prelude::{IntoQuery, *};
 use legion_sync::{components::UidComponent, resources::EventResource};
@@ -13,14 +12,15 @@ use std::time::Duration;
 use track::Trackable;
 
 pub fn move_player_system() -> Box<dyn Schedulable> {
-    SystemBuilder::new("move player")
+    SystemBuilder::new("move_player_system")
         .read_resource::<EventResource>()
+        .write_resource::<ClientState>()
         .with_query(<(
             legion::prelude::Write<Position>,
             Read<UidComponent>,
             Read<PlayerType>,
         )>::query())
-        .build(|_, mut world, resource, query| {
+        .build(|command, mut world, resource, query| {
             let new_pos = |event, x, y| -> (u16, u16) {
                 match event {
                     Event::Key(KeyEvent {
@@ -45,51 +45,24 @@ pub fn move_player_system() -> Box<dyn Schedulable> {
             if event::poll(Duration::from_millis(0)).unwrap() {
                 let event = event::read().unwrap();
 
-                for (mut pos, identifier, player) in query.iter_mut(&mut world) {
+                for (mut pos, id, player) in query.iter_mut(&mut world) {
                     if player.player_type() == PlayerTypeOp::Player {
-                        let mut pos = pos.track(resource.notifier(), identifier.uid());
+                        let mut pos = pos.track(resource.0.notifier(), id.uid());
                         let new_pos = new_pos(event, pos.x, pos.y);
                         pos.set(new_pos);
                     }
                 }
             };
-        })
-}
 
-pub fn insert_enemy_system() -> Box<dyn Schedulable> {
-    SystemBuilder::new("move player")
-        .write_resource::<ClientState>()
-        .build(|command, _, resource, _| {
-            if resource.frame % 100 == 0 {
-                command.insert(
-                    (),
-                    vec![(
-                        UidComponent::new(resource.uid_allocator.allocate(None)),
-                        Position::new(10, 15),
-                        Coloring::new(Color::Red),
-                        PlayerType::new(PlayerTypeOp::Enemy),
-                    )],
-                );
-            }
-        })
-}
-
-pub fn move_enemy_system() -> Box<dyn Schedulable> {
-    SystemBuilder::new("move player")
-        .write_resource::<ClientState>()
-        .read_resource::<EventResource>()
-        .with_query(<(
-            Read<UidComponent>,
-            legion::prelude::Write<Position>,
-            Read<Coloring>,
-            Read<PlayerType>,
-        )>::query())
-        .build(|_, mut world, resource, query| {
-            if resource.0.frame % 25 == 0 {
-                for (id, mut pos, _, player) in query.iter_mut(&mut world) {
+            if resource.1.frame % 25 == 0 {
+                for (mut pos, id, player) in query.iter_mut(&mut world) {
                     if player.player_type() == PlayerTypeOp::Enemy {
-                        let mut pos = pos.track(resource.1.notifier(), id.uid());
+                        debug!("iter enemies.");
 
+                        debug!("track pos.");
+                        let mut pos = pos.track(resource.0.notifier(), id.uid());
+
+                        debug!("update pos.");
                         if pos.x == 0 {
                             pos.x = 40;
                         } else {
@@ -98,20 +71,44 @@ pub fn move_enemy_system() -> Box<dyn Schedulable> {
                     }
                 }
             }
-            resource.0.frame += 1;
+
+            if resource.1.frame % 200 == 0 {
+                for (entity, (_, _, player)) in query.iter_entities_mut(&mut world) {
+                    if player.player_type() == PlayerTypeOp::Enemy {
+                        command.delete(entity);
+                    }
+                }
+            }
+
+            resource.1.frame += 1;
+        })
+}
+
+pub fn insert_enemy_system() -> Box<dyn Schedulable> {
+    SystemBuilder::new("insert_enemy_system")
+        .read_resource::<ClientState>()
+        .write_resource::<UidAllocator<Entity>>()
+        .build(|command, _, resource, _| {
+            if resource.0.frame % 100 == 0 {
+                let mut entity = command
+                    .start_entity()
+                    .with_component(Position::new(20, 15))
+                    .with_component(Coloring::new(Color::Red))
+                    .with_component(PlayerType::new(PlayerTypeOp::Enemy))
+                    .build();
+
+                let component = UidComponent::new(resource.1.allocate(entity, None));
+                command.add_component(entity, component);
+            }
         })
 }
 
 pub struct ClientState {
-    pub uid_allocator: UidAllocator,
     pub frame: u32,
 }
 
 impl ClientState {
-    pub fn new(alloc: UidAllocator) -> ClientState {
-        ClientState {
-            uid_allocator: alloc,
-            frame: 0,
-        }
+    pub fn new() -> ClientState {
+        ClientState { frame: 0 }
     }
 }

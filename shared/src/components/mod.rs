@@ -1,6 +1,5 @@
 use legion_sync::tracking::*;
 use crossterm::style::Color;
-use std::ops::Deref;
 
 #[sync]
 #[derive(Debug)]

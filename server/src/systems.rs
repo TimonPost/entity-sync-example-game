@@ -5,49 +5,47 @@ use legion_sync::{components::UidComponent, resources::ReceiveBufferResource, Re
 use log::debug;
 use track::Apply;
 
-use legion::command::WorldWritable;
-use legion::entity::{EntityAllocator, EntityBlock};
-use legion::filter::{ChunksetFilterData, Filter};
-use legion::storage::{ComponentTypeId, TagTypeId};
-use legion::world::{IntoComponentSource, TagLayout, TagSet};
-use legion_sync::register::ComponentRegister;
-use legion_sync::resources::{Packer, RegisteredComponentsResource};
-use legion_sync::tracking::{Bincode, SerializationStrategy};
+use legion::{
+    command::WorldWritable,
+    entity::{EntityAllocator, EntityBlock},
+    filter::{ChunksetFilterData, Filter},
+    storage::{ComponentTypeId, TagTypeId},
+    world::{IntoComponentSource, TagLayout, TagSet},
+};
 use legion_sync::{
     filters::filter_fns::{modified, removed},
-    resources::TrackResource,
+    register::ComponentRegister,
+    resources::{Packer, RegisteredComponentsResource, RemovedEntities, TrackResource},
+    tracking::{Bincode, SerializationStrategy},
 };
-use net_sync::compression::CompressionStrategy;
-use net_sync::uid::Uid;
-use std::any::Any;
-use std::sync::Arc;
+use net_sync::{compression::CompressionStrategy, uid::Uid};
+use std::{any::Any, sync::Arc};
 
-pub fn remove_entities_system() -> Box<dyn Schedulable> {
+pub fn entity_remove_system() -> Box<dyn Schedulable> {
     SystemBuilder::new("read_received_system")
         .write_resource::<ReceiveBufferResource>()
         .write_resource::<TrackResource>()
-        .with_query(<(Read<UidComponent>, legion::prelude::Write<Position>)>::query())
+        .write_resource::<RemovedEntities>()
+        .with_query(<(Read<UidComponent>)>::query())
         .build(|command_buffer, mut world, resource, query| {
             let filter = query.clone().filter(removed(&resource.1));
             let removed_packets: Vec<ReceivedPacket> = resource.0.drain_removed();
 
-            for (identifier, pos) in filter.iter_mut(&mut world) {
-                for packet in removed_packets.iter() {
-                    debug!("Removed entity {:?}", packet.event());
-                }
+            for (entity, identifier) in filter.iter_entities(&mut world) {
+                command_buffer.delete(entity);
+                resource.2.add(entity);
+                debug!("Removed entity {:?}", removed_packets);
             }
         })
 }
 
-pub fn apply_modifications_system() -> Box<dyn Schedulable> {
-    SystemBuilder::new("apply_modifications_system")
+pub fn position_update_system() -> Box<dyn Schedulable> {
+    SystemBuilder::new("position_update_system")
         .write_resource::<ReceiveBufferResource>()
         .write_resource::<TrackResource>()
         .read_resource::<RegisteredComponentsResource>()
         .with_query(<(Read<UidComponent>, legion::prelude::Write<Position>)>::query())
         .build(|command_buffer, mut world, resource, query| {
-            let by_uid = resource.2.slice_with_uid();
-
             let filter = query.clone().filter(modified(&resource.1));
 
             for (entity, (identifier, mut pos)) in filter.iter_entities_mut(&mut world) {
@@ -64,45 +62,8 @@ pub fn apply_modifications_system() -> Box<dyn Schedulable> {
                         packet.event()
                     {
                         Apply::apply_to(&mut *pos, &record.data(), Bincode);
-                    }
-                }
-            }
-        })
-}
 
-pub fn insert_received_entities_system() -> Box<dyn Schedulable> {
-    SystemBuilder::new("insert_received_entities_system")
-        .write_resource::<ReceiveBufferResource>()
-        .read_resource::<RegisteredComponentsResource>()
-        .build(|command_buffer, mut world, resource, _| {
-            let inserted_packets: Vec<ReceivedPacket> = resource.0.drain_inserted();
-
-            for packet in inserted_packets.iter() {
-                if let legion_sync::Event::EntityInserted(_entity_id, records) = packet.event() {
-                    let mut entity_builder = command_buffer.start_entity().build();
-
-                    debug!(
-                        "Inserted entity {:?} with {:?} components",
-                        _entity_id,
-                        records.len()
-                    );
-
-                    for component in records {
-                        let registered_components = resource.1.by_uid();
-                        let registered_component = registered_components
-                            .get(&Uid(component.register_id()))
-                            .unwrap();
-
-                        registered_component.deserialize_single(
-                            world,
-                            command_buffer,
-                            entity_builder.clone(),
-                            &component.data(),
-                        );
-                        debug!(
-                            "Added component {:?} to entity",
-                            registered_component.type_name()
-                        );
+                        debug!("Updating entity");
                     }
                 }
             }

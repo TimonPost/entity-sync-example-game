@@ -1,85 +1,78 @@
-use crate::systems::{
-    apply_modifications_system, insert_received_entities_system, remove_entities_system,
+use crate::systems::{entity_remove_system, position_update_system};
+use bincode::Config;
+use crossterm::{
+    cursor::Hide,
+    terminal::{enable_raw_mode, EnterAlternateScreen},
+    ExecutableCommand,
 };
-use crossterm::{cursor::Hide, terminal::enable_raw_mode, ExecutableCommand};
-use legion::prelude::{Resources, Schedule, Universe};
-use legion_sync::network_universe::NetworkUniverse;
-use legion_sync::resources::RegisteredComponentsResource;
-use legion_sync::tracking::Bincode;
+use legion::{
+    prelude::{CommandBuffer, Entity, Resources, Schedule, Universe, World},
+    systems::{resource::Resource, schedule::Builder},
+};
 use legion_sync::{
     resources::{
-        tcp::TcpListenerResource, BufferResource, Packer, ReceiveBufferResource, TrackResource,
+        tcp::TcpListenerResource, BufferResource, Packer, ReceiveBufferResource,
+        RegisteredComponentsResource, RemovedEntities, ResourcesExt, TickResource, TrackResource,
     },
-    systems::tcp::{tcp_connection_listener, tcp_receive_system},
+    systems::{
+        tcp::{tcp_connection_listener, tcp_receive_system},
+        SchedulerExt,
+    },
+    tracking::Bincode,
+    universe::{server::ServerUniverseBuilder, UniverseBuilder},
 };
-use net_sync::compression::lz4::Lz4;
+use net_sync::compression::{lz4::Lz4, CompressionStrategy};
 use shared::systems::{draw_entities, draw_player_system};
 use std::{
+    collections::VecDeque,
     io::stdout,
     net::{SocketAddr, TcpListener},
     thread,
     time::Duration,
 };
+use track::serialization::SerializationStrategy;
 
 mod systems;
 
 fn main() {
     initialize_terminal();
 
-    let mut universe = NetworkUniverse::new();
-    let mut local_world = universe.create_world();
-    let mut remote_world = universe.create_world();
-
     let listener = TcpListener::bind("127.0.0.1:1119".parse::<SocketAddr>().unwrap()).unwrap();
     listener.set_nonblocking(true);
 
-    let mut resources = Resources::default();
-    resources.insert(TrackResource::new());
-    resources.insert(ReceiveBufferResource::default());
-    resources.insert(TcpListenerResource::new(Some(listener)));
-    resources.insert(Packer::<Bincode, Lz4>::default());
-    resources.insert(BufferResource::from_capacity(1500));
-    resources.insert(RegisteredComponentsResource::new());
+    let mut server = ServerUniverseBuilder::default()
+        .main_builder(initialize_local_systems)
+        .remote_builder(initialize_remote_systems)
+        .with_tcp::<Bincode, Lz4>(listener)
+        .with_resource(TickResource::new())
+        .with_resource(RemovedEntities::new())
+        .default_resources::<Bincode, Lz4>()
+        .default_systems()
+        .build();
 
-    let mut remote_schedule = initialize_remote_sync_systems();
-    let mut local_schedule = initialize_local_systems();
-
-    let mut frame = 1;
     loop {
-        local_schedule.execute(&mut local_world, &mut resources);
-        remote_schedule.execute(&mut remote_world, &mut resources);
-
-        if frame % 10 == 0 {
-            universe.merge_into(&mut local_world, &remote_world);
-            frame = 1;
-        }
-
-        frame += 1;
+        server.tick();
         thread::sleep(Duration::from_millis(10));
     }
 }
 
 fn initialize_terminal() {
-    //            simple_logger::init().unwrap();
+    //                    simple_logger::init().unwrap();
     enable_raw_mode();
+    stdout().execute(EnterAlternateScreen);
     stdout().execute(Hide);
 }
 
-fn initialize_local_systems() -> Schedule {
-    Schedule::builder()
+fn initialize_local_systems(builder: Builder) -> Builder {
+    builder
         .add_system(draw_player_system())
-        //        .add_system(draw_entities())
+        //                .add_system(draw_entities())
         .flush()
-        .build()
 }
 
-fn initialize_remote_sync_systems() -> Schedule {
-    Schedule::builder()
-        .add_system(tcp_connection_listener())
-        .add_system(tcp_receive_system::<Bincode, Lz4>())
-        .add_system(insert_received_entities_system())
-        .add_system(apply_modifications_system())
-        .add_system(remove_entities_system())
+fn initialize_remote_systems(builder: Builder) -> Builder {
+    builder
+        .add_system(position_update_system())
+        .add_system(entity_remove_system())
         .flush()
-        .build()
 }

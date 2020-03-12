@@ -1,78 +1,78 @@
-use crate::systems::{insert_enemy_system, move_enemy_system, move_player_system, ClientState};
-use crossterm::style::Color;
-use crossterm::{cursor::Hide, terminal::enable_raw_mode, ExecutableCommand};
-use legion::{filter::filter_fns::any, prelude::*};
-use legion_sync::resources::{ReceiveBufferResource, RegisteredComponentsResource};
-use legion_sync::tracking::Bincode;
+use crate::systems::{insert_enemy_system, move_player_system, ClientState};
+use crossterm::{cursor::Hide, style::Color, terminal::enable_raw_mode, ExecutableCommand};
+use legion::systems::schedule::Builder;
 use legion_sync::{
     components::UidComponent,
-    resources::{tcp::TcpClientResource, EventResource, Packer, SentBufferResource},
-    systems::{tcp::tcp_sent_system, track_modifications_system},
+    filters::filter_fns::registered,
+    resources::{RemovedEntities, TickResource},
+    tracking::Bincode,
+    universe::{
+        client::{ClientUniverse, ClientUniverseBuilder},
+        UniverseBuilder,
+    },
 };
 use net_sync::{compression::lz4::Lz4, uid::UidAllocator};
-use shared::components::{Coloring, PlayerType, PlayerTypeOp};
-use shared::{components::Position, systems::draw_player_system};
+use shared::{
+    components::{Coloring, PlayerType, PlayerTypeOp, Position},
+    systems::draw_player_system,
+};
 use std::{io::stdout, thread, time::Duration};
 
 mod systems;
 
 fn main() {
     initialize_terminal();
-    let mut uid_allocator = UidAllocator::new();
 
-    let universe = Universe::new();
-    let mut world = universe.create_world();
+    let mut client = ClientUniverseBuilder::default()
+        .with_tcp::<Bincode, Lz4>("127.0.0.1:1119".parse().unwrap())
+        .main_builder(initialize_main_systems)
+        .with_resource(ClientState::new())
+        .with_resource(TickResource::new())
+        .with_resource(RemovedEntities::new())
+        .default_systems()
+        .default_resources::<Bincode, Lz4>()
+        .build();
 
-    let tcp_client = TcpClientResource::new("127.0.0.1:1119".parse().unwrap()).unwrap();
-    let mut event_resource = EventResource::new();
-
-    world.subscribe(event_resource.legion_subscriber().clone(), any());
-
-    let mut resources = Resources::default();
-    resources.insert(tcp_client);
-    resources.insert(event_resource);
-    resources.insert(SentBufferResource::new());
-    resources.insert(Packer::<Bincode, Lz4>::default());
-    resources.insert(RegisteredComponentsResource::new());
-    initial_data(&mut world, &mut uid_allocator);
-    resources.insert(ClientState::new(uid_allocator));
-
-    let mut schedule = initialize_systems();
+    initial_data(&mut client);
 
     loop {
-        schedule.execute(&mut world, &mut resources);
+        client.tick();
 
         thread::sleep(Duration::from_millis(20));
     }
 }
 
 fn initialize_terminal() {
-    //        simple_logger::init().unwrap();
+    //            simple_logger::init().unwrap();
     enable_raw_mode();
     stdout().execute(Hide);
 }
 
-fn initialize_systems() -> Schedule {
-    Schedule::builder()
-        .add_system(track_modifications_system())
-        .add_system(tcp_sent_system::<Bincode, Lz4>())
-        .add_system(move_player_system())
+fn initialize_main_systems(builder: Builder) -> Builder {
+    builder
         .add_system(draw_player_system())
         .add_system(insert_enemy_system())
-        .add_system(move_enemy_system())
-        .build()
+        .add_system(move_player_system())
+        .flush()
 }
 
-fn initial_data(world: &mut World, alloc: &mut UidAllocator) {
-    world.insert(
+fn initial_data(client: &mut ClientUniverse) {
+    let entities = client.universe().main_world_mut().insert(
         (),
         (0..1).map(|_| {
             (
                 Position { x: 5, y: 5 },
-                UidComponent::new(alloc.allocate(None)),
                 PlayerType::new(PlayerTypeOp::Player),
                 Coloring::new(Color::Blue),
             )
         }),
     );
+
+    for entity in entities.to_vec() {
+        let uid = UidComponent::new(client.new_entity_id(entity));
+        client
+            .universe()
+            .main_world_mut()
+            .add_component(entity, uid);
+    }
 }
