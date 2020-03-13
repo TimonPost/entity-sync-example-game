@@ -1,4 +1,4 @@
-use crate::systems::{entity_remove_system, position_update_system};
+use crate::systems::{entity_remove_system, update_system};
 use bincode::Config;
 use crossterm::{
     cursor::Hide,
@@ -11,8 +11,8 @@ use legion::{
 };
 use legion_sync::{
     resources::{
-        tcp::TcpListenerResource, BufferResource, Packer, ReceiveBufferResource,
-        RegisteredComponentsResource, RemovedEntities, ResourcesExt, TickResource, TrackResource,
+        tcp::TcpListenerResource, BufferResource, Packer, RegisteredComponentsResource,
+        RemovedEntities, ResourcesExt, TickResource, TrackResource,
     },
     systems::{
         tcp::{tcp_connection_listener, tcp_receive_system},
@@ -57,7 +57,7 @@ fn main() {
 }
 
 fn initialize_terminal() {
-    //                    simple_logger::init().unwrap();
+    //                        simple_logger::init().unwrap();
     enable_raw_mode();
     stdout().execute(EnterAlternateScreen);
     stdout().execute(Hide);
@@ -72,7 +72,7 @@ fn initialize_local_systems(builder: Builder) -> Builder {
 
 fn initialize_remote_systems(builder: Builder) -> Builder {
     builder
-        .add_system(position_update_system())
+        .add_system(update_system())
         .add_system(entity_remove_system())
         .flush()
 }

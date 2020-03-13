@@ -1,7 +1,7 @@
 use legion::prelude::*;
 use shared::components::Position;
 
-use legion_sync::{components::UidComponent, resources::ReceiveBufferResource, ReceivedPacket};
+use legion_sync::components::UidComponent;
 use log::debug;
 use track::Apply;
 
@@ -15,55 +15,75 @@ use legion::{
 use legion_sync::{
     filters::filter_fns::{modified, removed},
     register::ComponentRegister,
-    resources::{Packer, RegisteredComponentsResource, RemovedEntities, TrackResource},
+    resources::{
+        Packer, PostOfficeResource, RegisteredComponentsResource, RemovedEntities, TrackResource,
+    },
+    systems::SystemBuilderExt,
     tracking::{Bincode, SerializationStrategy},
 };
-use net_sync::{compression::CompressionStrategy, uid::Uid};
+use net_sync::{
+    compression::CompressionStrategy,
+    transport::{PostBox, PostOffice, ReceivedPacket},
+    uid::{Uid, UidAllocator},
+};
 use std::{any::Any, sync::Arc};
 
 pub fn entity_remove_system() -> Box<dyn Schedulable> {
     SystemBuilder::new("read_received_system")
-        .write_resource::<ReceiveBufferResource>()
-        .write_resource::<TrackResource>()
+        .write_resource::<PostOfficeResource>()
         .write_resource::<RemovedEntities>()
-        .with_query(<(Read<UidComponent>)>::query())
+        .read_resource::<UidAllocator<Entity>>()
         .build(|command_buffer, mut world, resource, query| {
-            let filter = query.clone().filter(removed(&resource.1));
-            let removed_packets: Vec<ReceivedPacket> = resource.0.drain_removed();
+            let mut postoffice: &mut PostOffice = &mut resource.0;
+            let mut removed_entities: &mut RemovedEntities = &mut resource.1;
+            let mut uid_allocator: &UidAllocator<Entity> = &resource.2;
 
-            for (entity, identifier) in filter.iter_entities(&mut world) {
-                command_buffer.delete(entity);
-                resource.2.add(entity);
-                debug!("Removed entity {:?}", removed_packets);
+            for (id, mut client) in postoffice.clients_mut().with_inbox() {
+                let mut postbox = client.postbox_mut();
+                if !postbox.empty_inbox() {
+                    let removed: Vec<legion_sync::Event> = postbox.drain_inbox_removed();
+
+                    for packet in removed {
+                        match packet {
+                            legion_sync::Event::EntityRemoved(entity_id) => {
+                                let entity = uid_allocator.get_by_val(&entity_id.id());
+                                command_buffer.delete(*entity);
+                                removed_entities.add(*entity);
+                                debug!("Removed entity {:?}", packet);
+                            }
+                            _ => panic!("Should only drain removed messages."),
+                        }
+                    }
+                }
             }
         })
 }
 
-pub fn position_update_system() -> Box<dyn Schedulable> {
+pub fn update_system() -> Box<dyn Schedulable> {
     SystemBuilder::new("position_update_system")
-        .write_resource::<ReceiveBufferResource>()
-        .write_resource::<TrackResource>()
-        .read_resource::<RegisteredComponentsResource>()
-        .with_query(<(Read<UidComponent>, legion::prelude::Write<Position>)>::query())
+        .write_registered_components()
+        .write_resource::<PostOfficeResource>()
+        .read_resource::<UidAllocator<Entity>>()
         .build(|command_buffer, mut world, resource, query| {
-            let filter = query.clone().filter(modified(&resource.1));
+            let mut postoffice: &mut PostOffice = &mut resource.0;
+            let mut uid_allocator: &UidAllocator<Entity> = &resource.1;
 
-            for (entity, (identifier, mut pos)) in filter.iter_entities_mut(&mut world) {
-                let uid = resource
-                    .2
-                    .get_uid(&pos.id().0)
-                    .expect("Type should be registered, make sure to implement `sync` attribute.");
+            for (id, mut client) in postoffice.clients_mut().with_inbox() {
+                let mut postbox = client.postbox_mut();
+                if !postbox.empty_inbox() {
+                    let modified: Vec<legion_sync::Event> = postbox.drain_inbox_modified();
 
-                let modified_packets: Vec<ReceivedPacket> =
-                    resource.0.drain_modified(identifier.uid(), *uid);
+                    for packet in modified.iter() {
+                        if let legion_sync::Event::ComponentModified(entity_id, record) = packet {
+                            let entity = uid_allocator.get_by_val(&entity_id.id());
 
-                for packet in modified_packets.iter() {
-                    if let legion_sync::Event::ComponentModified(_entity_id, record) =
-                        packet.event()
-                    {
-                        Apply::apply_to(&mut *pos, &record.data(), Bincode);
+                            let mut pos = world
+                                .get_component_mut::<Position>(*entity)
+                                .expect("Component does not exist");
+                            Apply::apply_to(&mut *pos, &record.data(), Bincode);
 
-                        debug!("Updating entity");
+                            debug!("Updating entity");
+                        }
                     }
                 }
             }
