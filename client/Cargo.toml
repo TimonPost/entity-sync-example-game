@@ -7,12 +7,13 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-legion = { version = "0.2.1", branch = "clone_move_rebased", path = "../../../legion"}
+legion = { version = "0.2.1", branch = "master", path = "../../../legion", default-features=false}
 legion-sync = { path = "../../legion-sync"}
 net-sync = { path =  "../../net-sync" }
-track = { path = "../../track"}
 shared = { path = "../shared"}
 
-crossterm = "0.16.0"
 simple_logger = "1.5.0"
 log="0.4.8"
+
+sdl2 = {version = "0.34.0", features=["gfx", "ttf"] }
+find_folder = "0.3.0"

@@ -1,45 +1,35 @@
-use legion::prelude::{IntoQuery, Schedulable, SystemBuilder, Read};
-use std::io::{stdout, Write};
-use crossterm::QueueableCommand;
-use crossterm::terminal::{ClearType, Clear};
-use crossterm::cursor::MoveTo;
-use crossterm::style::{Print, PrintStyledContent, style};
-use legion_sync::components::UidComponent;
-use crate::components::{Position, Coloring, PlayerType, PlayerTypeOp};
+use std::sync::{Mutex, Arc, MutexGuard, LockResult};
+use sdl2::render::WindowCanvas;
+use sdl2::EventPump;
+use sdl2::ttf::Sdl2TtfContext;
 
-pub fn draw_player_system() -> Box<dyn Schedulable> {
-    SystemBuilder::new("draw_player_system")
-        .with_query(<(Read<UidComponent>, legion::prelude::Read<Position>, Read<Coloring>, Read<PlayerType>)>::query())
-        .build(|_, mut world, _, query| {
-            let mut stdout = stdout();
-            stdout.queue(Clear(ClearType::All));
-
-            for (id, pos, color, player_type) in query.iter(&mut world) {
-                stdout.queue(MoveTo(pos.x, pos.y));
-
-                if player_type.player_type() == PlayerTypeOp::Enemy {
-                    stdout.queue(PrintStyledContent(style(id.id().to_string()).with(color.color_type())));
-                }else {
-                    stdout.queue(PrintStyledContent(style("O").with(color.color_type())));
-                }
-                stdout.flush();
-            }
-        })
+pub struct WindowResource {
+    window: Arc<Mutex<WindowCanvas>>,
+    event_pump: Arc<Mutex<EventPump>>,
+    tff_context: Arc<Mutex<Sdl2TtfContext>>
 }
 
-pub fn draw_entities() -> Box<dyn Schedulable> {
-    SystemBuilder::new("draw_player_system")
-        .with_query(<(Read<UidComponent>, legion::prelude::Read<Position>)>::query())
-        .build(|_, mut world, _, query| {
-            let mut stdout  = stdout();
-            stdout.queue(Clear(ClearType::All));
-            stdout.queue(MoveTo(0, 0));
-            let mut count = 0;
-            for (uid, mut pos) in query.iter_mut(&mut world) {
-                count += 1;
-                stdout.queue(Print(format!("{:?} {:?}\r\n", *uid, *pos)));
-                stdout.flush();
-            }
-//            println!("count: {}\n\r", count);
-        })
+unsafe impl Send for WindowResource{}
+unsafe impl Sync for WindowResource{}
+
+impl WindowResource {
+    pub fn new(window: WindowCanvas, event_pump: EventPump) -> WindowResource {
+        WindowResource {
+            window: Arc::new(Mutex::new(window)),
+            event_pump: Arc::new(Mutex::new(event_pump)),
+            tff_context: Arc::new(Mutex::new(sdl2::ttf::init().map_err(|e| e.to_string()).unwrap()))
+        }
+    }
+
+    pub fn window_lock(&self) -> LockResult<MutexGuard<WindowCanvas>> {
+        self.window.lock()
+    }
+
+    pub fn event_pump(&self) -> LockResult<MutexGuard<EventPump>> {
+        self.event_pump.lock()
+    }
+
+    pub fn tff(&self) -> LockResult<MutexGuard<Sdl2TtfContext>> {
+        self.tff_context.lock()
+    }
 }

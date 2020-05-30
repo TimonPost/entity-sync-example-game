@@ -1,78 +1,81 @@
-use crate::systems::{entity_remove_system, update_system};
-use bincode::Config;
-use crossterm::{
-    cursor::Hide,
-    terminal::{enable_raw_mode, EnterAlternateScreen},
-    ExecutableCommand,
+use std::net::{SocketAddr, TcpListener};
+
+use legion::systems::schedule::Builder;
+use shared::{
+    message::{ClientCommand, ClientMessage, ServerMessage},
+    systems::WindowResource,
 };
-use legion::{
-    prelude::{CommandBuffer, Entity, Resources, Schedule, Universe, World},
-    systems::{resource::Resource, schedule::Builder},
-};
+
 use legion_sync::{
-    resources::{
-        tcp::TcpListenerResource, BufferResource, Packer, RegisteredComponentsResource,
-        RemovedEntities, ResourcesExt, TickResource, TrackResource,
-    },
-    systems::{
-        tcp::{tcp_connection_listener, tcp_receive_system},
-        SchedulerExt,
-    },
     tracking::Bincode,
-    universe::{server::ServerUniverseBuilder, UniverseBuilder},
+    universe::{server::ServerWorldBuilder, UniverseBuilder},
 };
-use net_sync::compression::{lz4::Lz4, CompressionStrategy};
-use shared::systems::{draw_entities, draw_player_system};
-use std::{
-    collections::VecDeque,
-    io::stdout,
-    net::{SocketAddr, TcpListener},
-    thread,
-    time::Duration,
+use net_sync::{
+    clock::frame::{FrameLimiter, FrameRateLimitStrategy},
+    compression::lz4::Lz4,
 };
-use track::serialization::SerializationStrategy;
+
+use crate::systems::{handle_commands_system, handle_messages_system, render_server};
+use net_sync::synchronisation::ModifiedComponentsBuffer;
 
 mod systems;
 
 fn main() {
     initialize_terminal();
 
-    let listener = TcpListener::bind("127.0.0.1:1119".parse::<SocketAddr>().unwrap()).unwrap();
-    listener.set_nonblocking(true);
+    let window = initialize_window();
 
-    let mut server = ServerUniverseBuilder::default()
-        .main_builder(initialize_local_systems)
-        .remote_builder(initialize_remote_systems)
-        .with_tcp::<Bincode, Lz4>(listener)
-        .with_resource(TickResource::new())
-        .with_resource(RemovedEntities::new())
-        .default_resources::<Bincode, Lz4>()
-        .default_systems()
+    let tcp_listener = TcpListener::bind("127.0.0.1:1119".parse::<SocketAddr>().unwrap()).unwrap();
+
+    let mut server = ServerWorldBuilder::<ServerMessage, ClientMessage, ClientCommand>::default()
+        .with_tcp::<Bincode, Lz4>(tcp_listener)
+        .register_systems(initialize_systems)
+        .with_resource(FrameLimiter::new(FrameRateLimitStrategy::Yield, 30))
+        .with_resource(window)
+        .with_resource(ModifiedComponentsBuffer::new())
         .build();
 
     loop {
         server.tick();
-        thread::sleep(Duration::from_millis(10));
+
+        let resources = server.resources();
+
+        // let mut limiter = resources.get_mut::<FrameLimiter>().unwrap();
+        // limiter.wait();
     }
 }
 
+fn initialize_window() -> WindowResource {
+    let sdl_context = sdl2::init().unwrap();
+    let video_subsystem = sdl_context.video().unwrap();
+
+    let window = video_subsystem
+        .window("Server Entity Sync", 800, 800)
+        .position_centered()
+        .build()
+        .map_err(|e| e.to_string())
+        .unwrap();
+
+    let canvas = window
+        .into_canvas()
+        .build()
+        .map_err(|e| e.to_string())
+        .unwrap();
+
+    let event_pump = sdl_context.event_pump().unwrap();
+
+    WindowResource::new(canvas, event_pump)
+}
+
 fn initialize_terminal() {
-    //                        simple_logger::init().unwrap();
-    enable_raw_mode();
-    stdout().execute(EnterAlternateScreen);
-    stdout().execute(Hide);
+    simple_logger::init().unwrap();
 }
 
-fn initialize_local_systems(builder: Builder) -> Builder {
+fn initialize_systems(builder: Builder) -> Builder {
     builder
-        .add_system(draw_player_system())
-        //                .add_system(draw_entities())
-        .flush()
-}
-
-fn initialize_remote_systems(builder: Builder) -> Builder {
-    builder
-        .add_system(update_system())
-        .add_system(entity_remove_system())
+        .add_system(render_server())
+        //                .add_system(enemy_system())
+        .add_system(handle_messages_system())
+        .add_system(handle_commands_system())
         .flush()
 }

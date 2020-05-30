@@ -7,10 +7,11 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-track = { path = "../../track"}
 serde = "1"
 crossbeam-channel = "0.4.0"
 uuid = { version = "0.8.1", features=["serde", "v4"] }
-crossterm = "0.16.0"
 legion-sync = { path = "../../legion-sync"}
-legion = { version = "0.2.1", branch = "clone_move_rebased",  path = "../../../legion"}
+legion = { version = "0.2.1", branch = "master", path = "../../../legion", default-features=false}
+net-sync = { path =  "../../net-sync" }
+
+sdl2 = {version = "0.34.0", features=["gfx"] }

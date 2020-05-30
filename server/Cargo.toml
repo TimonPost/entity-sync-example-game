@@ -9,9 +9,7 @@ edition = "2018"
 [dependencies]
 simple_logger = "1.5.0"
 log = "0.4.8"
-track = { path = "../../track" }
-crossterm = "0.16.0"
-legion = { version = "0.2.1", branch = "clone_move_rebased", path = "../../../legion"}
+legion = { version = "0.2.1", branch = "master", path = "../../../legion", default-features=false}
 net-sync = { path =  "../../net-sync" }
 legion-sync = { path = "../../legion-sync"}
 bit-set = "0.5.1"
@@ -19,3 +17,6 @@ bit-set = "0.5.1"
 shared = { path = "../shared" }
 bincode = "1.2.1"
 serde-diff="0.2.0"
+
+sdl2 = {version = "0.34.0", features=["gfx", "ttf"] }
+find_folder = "0.3.0"

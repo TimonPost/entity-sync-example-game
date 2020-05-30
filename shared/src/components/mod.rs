@@ -1,5 +1,5 @@
 use legion_sync::tracking::*;
-use crossterm::style::Color;
+use net_sync::transport::ClientId;
 
 #[sync]
 #[derive(Debug)]
@@ -33,42 +33,6 @@ impl Default for Position {
 
 #[sync]
 #[derive(Debug)]
-pub struct Coloring {
-    color: u16
-}
-
-impl Coloring {
-    pub fn new(color: Color) -> Self {
-        let tag = match color {
-            Color::Red => { 1},
-            Color::Blue => { 2},
-            _ => panic!("Color not supported.")
-        };
-
-        Coloring {
-            color: tag
-        }
-    }
-
-    pub fn color_type(&self) -> Color {
-        match self.color {
-            1 => Color::Red,
-            2 => Color::Blue,
-            _ => panic!("Color not supported")
-        }
-    }
-}
-
-impl Default for Coloring {
-    fn default() -> Self {
-        Coloring {
-            color: 1
-        }
-    }
-}
-
-#[sync]
-#[derive(Debug)]
 pub struct PlayerType {
    pub player_type: u16
 }
@@ -89,6 +53,7 @@ impl PlayerType {
     }
 }
 
+#[derive(Debug)]
 #[derive(PartialOrd, PartialEq)]
 pub enum  PlayerTypeOp {
     Enemy = 1,
@@ -103,11 +68,31 @@ impl Default for PlayerType {
     }
 }
 
+#[sync]
+#[derive(Debug,PartialOrd, PartialEq)]
+pub struct PlayerInfo {
+    client_id: ClientId,
+}
 
-//#[track]
-//#[derive(Debug)]
-//struct PlayerInfo {
-//    pub
-//}
+impl PlayerInfo {
+    pub fn new(client_id: ClientId) -> PlayerInfo {
+        PlayerInfo {
+            client_id
+        }
+    }
+
+    pub fn client_id(&self) -> ClientId {
+        self.client_id
+    }
+}
+
+
+impl Default for PlayerInfo {
+    fn default() -> Self {
+        PlayerInfo {
+            client_id: 9999
+        }
+    }
+}
 
 
