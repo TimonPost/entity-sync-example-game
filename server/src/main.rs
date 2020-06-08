@@ -8,10 +8,10 @@ use shared::{
 
 use legion_sync::{
     tracking::Bincode,
-    universe::{server::ServerWorldBuilder, UniverseBuilder},
+    world::{server::ServerWorldBuilder, WorldBuilder},
 };
 use net_sync::{
-    clock::frame::{FrameLimiter, FrameRateLimitStrategy},
+    clock::{FrameLimiter, FrameRateLimitStrategy},
     compression::lz4::Lz4,
 };
 

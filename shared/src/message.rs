@@ -1,5 +1,6 @@
-use net_sync::transport::{NetworkMessage, NetworkCommand, ClientId};
+use net_sync::transport::{ClientId};
 use serde::{Serialize, Deserialize};
+use net_sync::synchronisation::{NetworkMessage, NetworkCommand};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum ClientCommand {
