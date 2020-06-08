@@ -7,27 +7,18 @@ use shared::{
     ConnectionInformation, SCREEN_WIDTH,
 };
 
-use legion_sync::{
-    components::UidComponent,
-    resources::EventResource,
-};
+use legion_sync::{components::UidComponent, resources::EventResource};
 use net_sync::{
-    synchronisation::{
-        ClientCommandBuffer,  CommandFrameTicker, ResimulationBuffer,
-    },
+    synchronisation::{ClientCommandBuffer, CommandFrameTicker, ResimulationBuffer},
     tracker::Trackable,
     transport,
     transport::{ClientToServerMessage, PostBox, ServerToClientMessage},
     uid::UidAllocator,
 };
 
-use sdl2::{
-    keyboard::Keycode,
-    pixels::Color,
-    rect::Rect,
-};
+use sdl2::{keyboard::Keycode, pixels::Color, rect::Rect};
 use shared::systems::WindowResource;
-use std::{collections::VecDeque};
+use std::collections::VecDeque;
 
 pub fn move_player_system() -> Box<dyn Schedulable> {
     SystemBuilder::new("move_player_system")
