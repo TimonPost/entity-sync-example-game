@@ -150,6 +150,7 @@ pub fn client_render_system() -> Box<dyn Schedulable> {
             let mut window_resource: &mut WindowResource = &mut resources.1;
             let input_buffer: &mut PressedInputBuffer = &mut resources.3;
             let command_frame = resources.2.command_frame();
+            let simulation_speed = resources.2.simulation_speed();
 
             let mut assets = find_folder::Search::ParentsThenKids(3, 3)
                 .for_folder("assets")
@@ -170,6 +171,7 @@ pub fn client_render_system() -> Box<dyn Schedulable> {
             if connection_info.is_connected() {
                 let command_frame_text = format!("CF: {}", command_frame);
                 let client_id_text = format!("C Id: {}", connection_info.client_id());
+                let simulation_speed_text = format!("Sim: {}", simulation_speed);
 
                 let rendered_text = create_texture_from_text(
                     &texture_creator,
@@ -204,6 +206,21 @@ pub fn client_render_system() -> Box<dyn Schedulable> {
                         )),
                     )
                     .unwrap();
+
+                let rendered_text =
+                    create_texture_from_text(&texture_creator, &font, &simulation_speed_text, 255, 0, 0);
+                canvas
+                    .copy(
+                        &rendered_text,
+                        None,
+                        Some(get_rect_from_text(
+                            &client_id_text,
+                            SCREEN_WIDTH as i32 - 200,
+                            160,
+                        )),
+                    )
+                    .unwrap();
+
 
                 // === Render Players
                 for (id, pos, player_type) in query.iter(&mut world) {
